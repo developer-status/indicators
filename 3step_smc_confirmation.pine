@@ -1,118 +1,72 @@
-// ══════════════════════════════════════════════════════════════════════════════
-// 3-Step SMC Confirmation
-// ── ① Anchored Price Position  (15min Prev High / Low)
-// ── ② Strength vs Weakness     (5min body analysis)
-// ── ③ Fair Value Gap / Fresh Range (1m · 5m · 15m FVG boxes)
-//
-// Designed for: 1min chart (5min & 15min data pulled via request.security)
-// Output      : visual boxes + anchor lines only — no alerts, no arrows
-// ══════════════════════════════════════════════════════════════════════════════
 //@version=5
 indicator("3-Step SMC Confirmation", overlay=true,
-     max_boxes_count  = 500,
-     max_lines_count  = 60,
-     max_labels_count = 60)
+     max_boxes_count=200, max_lines_count=20, max_labels_count=10)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INPUTS
-// ─────────────────────────────────────────────────────────────────────────────
-G1 = "① Anchor — 15min Prev High / Low"
-i_anc        = input.bool(true,  "Show Anchor Lines",           group = G1)
-i_anc_col    = input.color(color.orange, "Line Color",          group = G1)
+// ─── INPUTS ───────────────────────────────────────────────────────────────────
+// ① Anchor
+i_anc     = input.bool(true,  "Show 15min Anchor H/L",     group="① Anchor")
+i_anc_col = input.color(color.new(color.orange,0), "Color", group="① Anchor")
 
-G2 = "② Strength vs Weakness (5min)"
-i_sw         = input.bool(true,  "Highlight Chart Background",  group = G2)
-i_str_col    = input.color(color.new(color.teal, 72), "Strength (Bullish)", group = G2)
-i_wk_col     = input.color(color.new(color.red,  72), "Weakness (Bearish)", group = G2)
-i_body_th    = input.float(0.60, "Min Body/Range Ratio",        group = G2,
-               minval = 0.10, maxval = 1.00, step = 0.05,
-               tooltip = "0.6 = body must be ≥ 60 % of the candle range. Higher = stricter.")
+// ② Strength / Weakness
+i_sw      = input.bool(false, "Show Strength/Weakness bg",  group="② Strength vs Weakness")
+i_str_col = input.color(color.new(color.teal,82), "Bull",   group="② Strength vs Weakness")
+i_wk_col  = input.color(color.new(color.red, 82), "Bear",   group="② Strength vs Weakness")
+i_body_th = input.float(0.65, "Min Body Ratio",             group="② Strength vs Weakness", minval=0.1, maxval=1.0, step=0.05)
 
-G3 = "③ Fair Value Gaps"
-i_f15        = input.bool(true,  "Show 15min FVGs",             group = G3)
-i_f5         = input.bool(true,  "Show 5min FVGs",              group = G3)
-i_f1         = input.bool(true,  "Show 1min FVGs (chart ≤ 1m)", group = G3)
-i_bull_col   = input.color(color.new(#00bcd4, 75), "Bullish FVG Color", group = G3)
-i_bear_col   = input.color(color.new(#f44336, 75), "Bearish FVG Color", group = G3)
-i_used_col   = input.color(color.new(color.gray, 90), "Filled / Used FVG", group = G3)
-i_nfvg       = input.int(12, "Max FVGs per TF",                 group = G3,
-               minval = 3, maxval = 50,
-               tooltip = "Oldest box is removed when this limit is exceeded.")
-i_ext        = input.int(200, "Box Extension (bars right)",     group = G3,
-               minval = 10, maxval = 2000)
+// ③ FVG
+i_f15     = input.bool(true,  "15min FVGs",                 group="③ Fair Value Gaps")
+i_f5      = input.bool(true,  "5min FVGs",                  group="③ Fair Value Gaps")
+i_f1      = input.bool(true,  "1min FVGs",                  group="③ Fair Value Gaps")
+i_bull    = input.color(color.new(#00bcd4,82), "Bullish",   group="③ Fair Value Gaps")
+i_bear    = input.color(color.new(#f44336,82), "Bearish",   group="③ Fair Value Gaps")
+i_used    = input.color(color.new(color.gray,92), "Filled", group="③ Fair Value Gaps")
+i_nfvg    = input.int(5,   "Max FVGs per TF",               group="③ Fair Value Gaps", minval=1, maxval=20)
+i_ext     = input.int(100, "Box width (bars)",               group="③ Fair Value Gaps", minval=10, maxval=500)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// USER-DEFINED TYPE
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── TYPE ─────────────────────────────────────────────────────────────────────
 type FVG
     box   bx
     float top
     float bot
-    bool  is_bull
     bool  is_used
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PERSISTENT STATE
-// ─────────────────────────────────────────────────────────────────────────────
-var FVG[] arr15 = array.new<FVG>()
-var FVG[] arr5  = array.new<FVG>()
-var FVG[] arr1  = array.new<FVG>()
+// ─── STATE ────────────────────────────────────────────────────────────────────
+var FVG[] a15 = array.new<FVG>()
+var FVG[] a5  = array.new<FVG>()
+var FVG[] a1  = array.new<FVG>()
+var line  lh  = na
+var line  ll  = na
+var label lbl = na
 
-var line  l_h   = na
-var line  l_l   = na
-var line  l_m   = na
-var label lb_h  = na
-var label lb_l  = na
-var label lb_m  = na
-var label lb_bias = na
+// ─── SECURITY CALLS ───────────────────────────────────────────────────────────
+anc_h  = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_on)
+anc_l  = request.security(syminfo.tickerid, "15", low[1],  lookahead=barmerge.lookahead_on)
+anc_m  = math.avg(anc_h, anc_l)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DATA REQUESTS  (must be at top level in Pine Script v5)
-// ─────────────────────────────────────────────────────────────────────────────
+o5 = request.security(syminfo.tickerid, "5", open,  lookahead=barmerge.lookahead_on)
+h5 = request.security(syminfo.tickerid, "5", high,  lookahead=barmerge.lookahead_on)
+l5 = request.security(syminfo.tickerid, "5", low,   lookahead=barmerge.lookahead_on)
+c5 = request.security(syminfo.tickerid, "5", close, lookahead=barmerge.lookahead_on)
 
-// ① Anchor: previous 15min candle's High, Low, Mid
-anc_h = request.security(syminfo.tickerid, "15", high[1], lookahead = barmerge.lookahead_on)
-anc_l = request.security(syminfo.tickerid, "15", low[1],  lookahead = barmerge.lookahead_on)
-anc_m = math.avg(anc_h, anc_l)
+h15c1 = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_on)
+l15c1 = request.security(syminfo.tickerid, "15", low[1],  lookahead=barmerge.lookahead_on)
+h15c3 = request.security(syminfo.tickerid, "15", high[3], lookahead=barmerge.lookahead_on)
+l15c3 = request.security(syminfo.tickerid, "15", low[3],  lookahead=barmerge.lookahead_on)
 
-// ② 5min candle (current — for live S/W background)
-[o5, h5, l5, c5] = request.security(syminfo.tickerid, "5",
-     [open, high, low, close], lookahead = barmerge.lookahead_on)
+h5c1 = request.security(syminfo.tickerid, "5", high[1], lookahead=barmerge.lookahead_on)
+l5c1 = request.security(syminfo.tickerid, "5", low[1],  lookahead=barmerge.lookahead_on)
+h5c3 = request.security(syminfo.tickerid, "5", high[3], lookahead=barmerge.lookahead_on)
+l5c3 = request.security(syminfo.tickerid, "5", low[3],  lookahead=barmerge.lookahead_on)
 
-// ③ FVG candle data: C1 (newest confirmed) and C3 (2 bars before C1) on each TF
-//    Pattern:  C3 ──── C2 (impulse) ──── C1
-//    Bull FVG: C1.low  > C3.high  →  gap = [C3.high … C1.low]
-//    Bear FVG: C1.high < C3.low   →  gap = [C1.high … C3.low]
-[h15c1, l15c1, h15c3, l15c3] = request.security(syminfo.tickerid, "15",
-     [high[1], low[1], high[3], low[3]], lookahead = barmerge.lookahead_on)
-
-[h5c1, l5c1, h5c3, l5c3]   = request.security(syminfo.tickerid, "5",
-     [high[1], low[1], high[3], low[3]], lookahead = barmerge.lookahead_on)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER FUNCTIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Add a new FVG box; evict oldest if at cap
-f_add(arr, is_bull, top, bot, bw, lbl) =>
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+f_add(arr, is_bull, top, bot, bw) =>
     if array.size(arr) >= i_nfvg
         old = array.shift(arr)
         box.delete(old.bx)
-    col = is_bull ? i_bull_col : i_bear_col
-    bx  = box.new(
-         bar_index - 2, top,
-         bar_index + i_ext, bot,
-         bgcolor       = col,
-         border_color  = col,
-         border_width  = bw,
-         text          = lbl,
-         text_size     = size.tiny,
-         text_color    = color.new(color.white, 20),
-         text_halign   = text.align_right,
-         text_valign   = text.align_top)
-    array.push(arr, FVG.new(bx, top, bot, is_bull, false))
+    col = is_bull ? i_bull : i_bear
+    bx  = box.new(bar_index - 2, top, bar_index + i_ext, bot, bgcolor=col, border_color=col, border_width=bw)
+    array.push(arr, FVG.new(bx, top, bot, false))
 
-// Mark FVG as filled when price overlaps the zone
 f_fill(arr) =>
     n = array.size(arr)
     if n > 0
@@ -120,95 +74,49 @@ f_fill(arr) =>
             f = array.get(arr, i)
             if not f.is_used and high >= f.bot and low <= f.top
                 f.is_used := true
-                box.set_bgcolor(f.bx,     i_used_col)
-                box.set_border_color(f.bx, i_used_col)
+                box.set_bgcolor(f.bx, i_used)
+                box.set_border_color(f.bx, i_used)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ① ANCHORED PRICE POSITION — 15min Prev H / L
-// ─────────────────────────────────────────────────────────────────────────────
-bias_bull = close >= anc_m
-
+// ─── ① ANCHOR ─────────────────────────────────────────────────────────────────
 if i_anc and (timeframe.change("15") or barstate.isfirst)
-    // Remove previous period's lines & labels
-    line.delete(l_h),  line.delete(l_l),  line.delete(l_m)
-    label.delete(lb_h), label.delete(lb_l), label.delete(lb_m)
-    label.delete(lb_bias)
+    line.delete(lh)
+    line.delete(ll)
+    label.delete(lbl)
+    lh  := line.new(bar_index, anc_h, bar_index + 1, anc_h, extend=extend.right, color=i_anc_col, style=line.style_dashed, width=1)
+    ll  := line.new(bar_index, anc_l, bar_index + 1, anc_l, extend=extend.right, color=i_anc_col, style=line.style_dashed, width=1)
+    bias_str = close >= anc_m ? "▲ Bull" : "▼ Bear"
+    lbl := label.new(bar_index, anc_m, bias_str, style=label.style_label_right, color=color.new(i_anc_col,75), textcolor=color.white, size=size.small)
 
-    // Draw three horizontal lines (extend right indefinitely)
-    l_h := line.new(bar_index, anc_h, bar_index + 1, anc_h,
-          extend = extend.right, color = i_anc_col,
-          style  = line.style_dashed, width = 2)
-    l_l := line.new(bar_index, anc_l, bar_index + 1, anc_l,
-          extend = extend.right, color = i_anc_col,
-          style  = line.style_dashed, width = 2)
-    l_m := line.new(bar_index, anc_m, bar_index + 1, anc_m,
-          extend = extend.right, color = color.new(i_anc_col, 50),
-          style  = line.style_dotted, width = 1)
+// ─── ② STRENGTH VS WEAKNESS ───────────────────────────────────────────────────
+if i_sw and timeframe.in_seconds() < 300
+    rng   = h5 - l5
+    body  = math.abs(c5 - o5)
+    ratio = rng > 0 ? body / rng : 0.0
+    is_str = c5 > o5 and ratio >= i_body_th and (h5 - c5) <= body * 0.3
+    is_wk  = c5 < o5 and ratio >= i_body_th and (c5 - l5) <= body * 0.3
+    bg_col = is_str ? i_str_col : is_wk ? i_wk_col : na
+    bgcolor(bg_col)
 
-    // Labels for each anchor level
-    lb_h := label.new(bar_index, anc_h, "15m H",
-             style = label.style_none, textcolor = i_anc_col, size = size.small)
-    lb_l := label.new(bar_index, anc_l, "15m L",
-             style = label.style_none, textcolor = i_anc_col, size = size.small)
-    lb_m := label.new(bar_index, anc_m, "Mid",
-             style = label.style_none, textcolor = color.new(i_anc_col, 30), size = size.tiny)
+// ─── ③ FVG 15min ──────────────────────────────────────────────────────────────
+if i_f15 and timeframe.in_seconds() < 900 and timeframe.change("15")
+    if l15c1 > h15c3
+        f_add(a15, true,  l15c1, h15c3, 2)
+    if h15c1 < l15c3
+        f_add(a15, false, l15c3, h15c1, 2)
+f_fill(a15)
 
-    // Bias label (above H or below L depending on side)
-    bias_txt = bias_bull ? "▲ BULL BIAS" : "▼ BEAR BIAS"
-    bias_col = bias_bull ? color.teal : color.red
-    bias_y   = bias_bull ? anc_h + syminfo.mintick * 5 : anc_l - syminfo.mintick * 5
-    lb_bias := label.new(bar_index, bias_y, bias_txt,
-               style     = label.style_label_left,
-               color     = color.new(bias_col, 70),
-               textcolor = bias_col,
-               size      = size.normal)
+// ─── ③ FVG 5min ───────────────────────────────────────────────────────────────
+if i_f5 and timeframe.in_seconds() < 300 and timeframe.change("5")
+    if l5c1 > h5c3
+        f_add(a5, true,  l5c1, h5c3, 1)
+    if h5c1 < l5c3
+        f_add(a5, false, l5c3, h5c1, 1)
+f_fill(a5)
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ② STRENGTH vs WEAKNESS — 5min candle body analysis
-// ─────────────────────────────────────────────────────────────────────────────
-rng5   = h5 - l5
-body5  = math.abs(c5 - o5)
-ratio5 = rng5 > 0.0 ? body5 / rng5 : 0.0
-
-// Strong bull: big body, bull candle, closes near its high (wick < 30 % of body)
-is_str = c5 > o5 and ratio5 >= i_body_th and (h5 - c5) <= body5 * 0.30
-// Strong bear: big body, bear candle, closes near its low
-is_wk  = c5 < o5 and ratio5 >= i_body_th and (c5 - l5) <= body5 * 0.30
-
-// S/W background only meaningful when chart TF is below 5min
-sw_col = (i_sw and timeframe.in_seconds() < 300) ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na
-bgcolor(sw_col, title = "Strength / Weakness Background")
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ③ FAIR VALUE GAPS — 15min
-// ─────────────────────────────────────────────────────────────────────────────
-// 15min FVGs — only draw when chart TF is strictly below 15min
-if i_f15 and timeframe.in_seconds() < 900
-    if timeframe.change("15")
-        if l15c1 > h15c3
-            f_add(arr15, true,  l15c1, h15c3, 2, "FVG 15m ▲")
-        if h15c1 < l15c3
-            f_add(arr15, false, l15c3, h15c1, 2, "FVG 15m ▼")
-    f_fill(arr15)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ③ FAIR VALUE GAPS — 5min
-// ─────────────────────────────────────────────────────────────────────────────
-// 5min FVGs — only draw when chart TF is strictly below 5min
-if i_f5 and timeframe.in_seconds() < 300
-    if timeframe.change("5")
-        if l5c1 > h5c3
-            f_add(arr5, true,  l5c1, h5c3, 1, "FVG 5m ▲")
-        if h5c1 < l5c3
-            f_add(arr5, false, l5c3, h5c1, 1, "FVG 5m ▼")
-    f_fill(arr5)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ③ FAIR VALUE GAPS — 1min  (only active when chart timeframe = 1 minute)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── ③ FVG 1min ───────────────────────────────────────────────────────────────
 if i_f1 and timeframe.in_seconds() <= 60 and barstate.isconfirmed
     if low > high[2]
-        f_add(arr1, true,  low,    high[2], 1, "FVG 1m ▲")
+        f_add(a1, true,  low,    high[2], 1)
     if high < low[2]
-        f_add(arr1, false, low[2], high,    1, "FVG 1m ▼")
-    f_fill(arr1)
+        f_add(a1, false, low[2], high,    1)
+f_fill(a1)

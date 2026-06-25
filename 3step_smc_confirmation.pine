@@ -173,8 +173,8 @@ is_str = c5 > o5 and ratio5 >= i_body_th and (h5 - c5) <= body5 * 0.30
 // Strong bear: big body, bear candle, closes near its low
 is_wk  = c5 < o5 and ratio5 >= i_body_th and (c5 - l5) <= body5 * 0.30
 
-bgcolor(i_sw ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na,
-        title = "Strength / Weakness Background")
+sw_col = i_sw ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na
+bgcolor(sw_col, title = "Strength / Weakness Background")
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ FAIR VALUE GAPS — 15min

@@ -1,33 +1,30 @@
 //@version=5
-indicator("3-Step SMC Confirmation", overlay=true,
-     max_boxes_count=200, max_lines_count=20, max_labels_count=10)
+indicator("3-Step SMC Confirmation", overlay=true, max_boxes_count=200, max_lines_count=20, max_labels_count=10)
 
 // ─── INPUTS ───────────────────────────────────────────────────────────────────
-// ① Anchor
-i_anc     = input.bool(true,  "Show 15min Anchor H/L",     group="① Anchor")
+i_anc     = input.bool(true,  "Show 15min Anchor H/L",    group="① Anchor")
 i_anc_col = input.color(color.new(color.orange,0), "Color", group="① Anchor")
 
-// ② Strength / Weakness
-i_sw      = input.bool(false, "Show Strength/Weakness bg",  group="② Strength vs Weakness")
-i_str_col = input.color(color.new(color.teal,82), "Bull",   group="② Strength vs Weakness")
-i_wk_col  = input.color(color.new(color.red, 82), "Bear",   group="② Strength vs Weakness")
-i_body_th = input.float(0.65, "Min Body Ratio",             group="② Strength vs Weakness", minval=0.1, maxval=1.0, step=0.05)
+i_sw      = input.bool(false, "Show Strength/Weakness bg", group="② Strength vs Weakness")
+i_str_col = input.color(color.new(color.teal,82), "Bull",  group="② Strength vs Weakness")
+i_wk_col  = input.color(color.new(color.red, 82), "Bear",  group="② Strength vs Weakness")
+i_body_th = input.float(0.65, "Min Body Ratio",            group="② Strength vs Weakness", minval=0.1, maxval=1.0, step=0.05)
 
-// ③ FVG
-i_f15     = input.bool(true,  "15min FVGs",                 group="③ Fair Value Gaps")
-i_f5      = input.bool(true,  "5min FVGs",                  group="③ Fair Value Gaps")
-i_f1      = input.bool(true,  "1min FVGs",                  group="③ Fair Value Gaps")
-i_bull    = input.color(color.new(#00bcd4,82), "Bullish",   group="③ Fair Value Gaps")
-i_bear    = input.color(color.new(#f44336,82), "Bearish",   group="③ Fair Value Gaps")
-i_used    = input.color(color.new(color.gray,92), "Filled", group="③ Fair Value Gaps")
-i_nfvg    = input.int(5,   "Max FVGs per TF",               group="③ Fair Value Gaps", minval=1, maxval=20)
-i_ext     = input.int(100, "Box width (bars)",               group="③ Fair Value Gaps", minval=10, maxval=500)
+i_f15     = input.bool(true,  "15min FVGs",                group="③ Fair Value Gaps")
+i_f5      = input.bool(true,  "5min FVGs",                 group="③ Fair Value Gaps")
+i_f1      = input.bool(true,  "1min FVGs",                 group="③ Fair Value Gaps")
+i_bull    = input.color(color.new(#00bcd4,82), "Bullish",  group="③ Fair Value Gaps")
+i_bear    = input.color(color.new(#f44336,82), "Bearish",  group="③ Fair Value Gaps")
+i_used    = input.color(color.new(color.gray,92), "Filled",group="③ Fair Value Gaps")
+i_nfvg    = input.int(5,   "Max FVGs per TF",              group="③ Fair Value Gaps", minval=1, maxval=20)
+i_ext     = input.int(100, "Box width (bars)",              group="③ Fair Value Gaps", minval=10, maxval=500)
 
 // ─── TYPE ─────────────────────────────────────────────────────────────────────
 type FVG
     box   bx
     float top
     float bot
+    bool  is_bull
     bool  is_used
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -37,26 +34,27 @@ var FVG[] a1  = array.new<FVG>()
 var line  lh  = na
 var line  ll  = na
 var label lbl = na
+var table panel = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black,65), border_color=color.new(color.gray,50), border_width=1, frame_color=color.new(color.gray,50), frame_width=1)
 
 // ─── SECURITY CALLS ───────────────────────────────────────────────────────────
-anc_h  = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_on)
-anc_l  = request.security(syminfo.tickerid, "15", low[1],  lookahead=barmerge.lookahead_on)
-anc_m  = math.avg(anc_h, anc_l)
+anc_h = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_on)
+anc_l = request.security(syminfo.tickerid, "15", low[1],  lookahead=barmerge.lookahead_on)
+anc_m = math.avg(anc_h, anc_l)
 
-o5 = request.security(syminfo.tickerid, "5", open,  lookahead=barmerge.lookahead_on)
-h5 = request.security(syminfo.tickerid, "5", high,  lookahead=barmerge.lookahead_on)
-l5 = request.security(syminfo.tickerid, "5", low,   lookahead=barmerge.lookahead_on)
-c5 = request.security(syminfo.tickerid, "5", close, lookahead=barmerge.lookahead_on)
+o5    = request.security(syminfo.tickerid, "5", open,  lookahead=barmerge.lookahead_on)
+h5    = request.security(syminfo.tickerid, "5", high,  lookahead=barmerge.lookahead_on)
+l5    = request.security(syminfo.tickerid, "5", low,   lookahead=barmerge.lookahead_on)
+c5    = request.security(syminfo.tickerid, "5", close, lookahead=barmerge.lookahead_on)
 
 h15c1 = request.security(syminfo.tickerid, "15", high[1], lookahead=barmerge.lookahead_on)
 l15c1 = request.security(syminfo.tickerid, "15", low[1],  lookahead=barmerge.lookahead_on)
 h15c3 = request.security(syminfo.tickerid, "15", high[3], lookahead=barmerge.lookahead_on)
 l15c3 = request.security(syminfo.tickerid, "15", low[3],  lookahead=barmerge.lookahead_on)
 
-h5c1 = request.security(syminfo.tickerid, "5", high[1], lookahead=barmerge.lookahead_on)
-l5c1 = request.security(syminfo.tickerid, "5", low[1],  lookahead=barmerge.lookahead_on)
-h5c3 = request.security(syminfo.tickerid, "5", high[3], lookahead=barmerge.lookahead_on)
-l5c3 = request.security(syminfo.tickerid, "5", low[3],  lookahead=barmerge.lookahead_on)
+h5c1  = request.security(syminfo.tickerid, "5", high[1], lookahead=barmerge.lookahead_on)
+l5c1  = request.security(syminfo.tickerid, "5", low[1],  lookahead=barmerge.lookahead_on)
+h5c3  = request.security(syminfo.tickerid, "5", high[3], lookahead=barmerge.lookahead_on)
+l5c3  = request.security(syminfo.tickerid, "5", low[3],  lookahead=barmerge.lookahead_on)
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 f_add(arr, is_bull, top, bot, bw) =>
@@ -65,7 +63,7 @@ f_add(arr, is_bull, top, bot, bw) =>
         box.delete(old.bx)
     col = is_bull ? i_bull : i_bear
     bx  = box.new(bar_index - 2, top, bar_index + i_ext, bot, bgcolor=col, border_color=col, border_width=bw)
-    array.push(arr, FVG.new(bx, top, bot, false))
+    array.push(arr, FVG.new(bx, top, bot, is_bull, false))
 
 f_fill(arr) =>
     n = array.size(arr)
@@ -77,14 +75,38 @@ f_fill(arr) =>
                 box.set_bgcolor(f.bx, i_used)
                 box.set_border_color(f.bx, i_used)
 
+// Returns true if any fresh bullish FVG exists below current price
+f_fresh_bull(arr) =>
+    found = false
+    n = array.size(arr)
+    if n > 0
+        for i = 0 to n - 1
+            f = array.get(arr, i)
+            if not f.is_used and f.is_bull and f.top < close
+                found := true
+    found
+
+// Returns true if any fresh bearish FVG exists above current price
+f_fresh_bear(arr) =>
+    found = false
+    n = array.size(arr)
+    if n > 0
+        for i = 0 to n - 1
+            f = array.get(arr, i)
+            if not f.is_used and not f.is_bull and f.bot > close
+                found := true
+    found
+
 // ─── ① ANCHOR ─────────────────────────────────────────────────────────────────
+bias_bull = close >= anc_m
+
 if i_anc and (timeframe.change("15") or barstate.isfirst)
     line.delete(lh)
     line.delete(ll)
     label.delete(lbl)
     lh  := line.new(bar_index, anc_h, bar_index + 1, anc_h, extend=extend.right, color=i_anc_col, style=line.style_dashed, width=1)
     ll  := line.new(bar_index, anc_l, bar_index + 1, anc_l, extend=extend.right, color=i_anc_col, style=line.style_dashed, width=1)
-    bias_str = close >= anc_m ? "▲ Bull" : "▼ Bear"
+    bias_str = bias_bull ? "▲ Bull" : "▼ Bear"
     lbl := label.new(bar_index, anc_m, bias_str, style=label.style_label_right, color=color.new(i_anc_col,75), textcolor=color.white, size=size.small)
 
 // ─── ② STRENGTH VS WEAKNESS ───────────────────────────────────────────────────
@@ -119,3 +141,35 @@ if i_f1 and timeframe.in_seconds() <= 60 and barstate.isconfirmed
     if high < low[2]
         f_add(a1, false, low[2], high,    1)
 f_fill(a1)
+
+// ─── SIGNAL PANEL ─────────────────────────────────────────────────────────────
+fvg_bull = f_fresh_bull(a15) or f_fresh_bull(a5) or f_fresh_bull(a1)
+fvg_bear = f_fresh_bear(a15) or f_fresh_bear(a5) or f_fresh_bear(a1)
+
+long_score  = (bias_bull ? 1 : 0) + (is_str ? 1 : 0) + (fvg_bull ? 1 : 0)
+short_score = (not bias_bull ? 1 : 0) + (is_wk ? 1 : 0) + (fvg_bear ? 1 : 0)
+
+signal_txt = long_score == 3 ? "LONG  ▲" : short_score == 3 ? "SHORT  ▼" : long_score == 2 ? "Watch LONG" : short_score == 2 ? "Watch SHORT" : "WAIT"
+signal_col = long_score == 3 ? color.teal : short_score == 3 ? color.red : color.gray
+signal_bg  = long_score == 3 ? color.new(color.teal,70) : short_score == 3 ? color.new(color.red,70) : color.new(color.gray,80)
+
+c_bull = color.new(color.teal, 0)
+c_bear = color.new(color.red,  0)
+c_neu  = color.new(color.gray, 30)
+c_bg   = color.new(color.black, 65)
+
+if barstate.islast
+    table.cell(panel, 0, 0, "① Bias",     text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 1, 0, bias_bull ? "▲ Bull" : "▼ Bear", text_color=bias_bull ? c_bull : c_bear, text_size=size.small, bgcolor=c_bg)
+
+    table.cell(panel, 0, 1, "② Strength", text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 1, 1, is_str ? "Strong ▲" : is_wk ? "Weak ▼" : "Neutral", text_color=is_str ? c_bull : is_wk ? c_bear : c_neu, text_size=size.small, bgcolor=c_bg)
+
+    table.cell(panel, 0, 2, "③ FVG",      text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 1, 2, fvg_bull ? "Fresh ▲" : fvg_bear ? "Fresh ▼" : "None", text_color=fvg_bull ? c_bull : fvg_bear ? c_bear : c_neu, text_size=size.small, bgcolor=c_bg)
+
+    table.cell(panel, 0, 3, str.tostring(long_score) + "/3 Long  " + str.tostring(short_score) + "/3 Short", text_color=c_neu, text_size=size.tiny, bgcolor=c_bg)
+    table.cell(panel, 1, 3, "", bgcolor=c_bg)
+
+    table.cell(panel, 0, 4, "SIGNAL",     text_color=color.white, text_size=size.normal, bgcolor=signal_bg)
+    table.cell(panel, 1, 4, signal_txt,   text_color=signal_col,  text_size=size.normal, bgcolor=signal_bg)

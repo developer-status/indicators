@@ -114,12 +114,14 @@ f_add(arr, is_bull, top, bot, bw, lbl) =>
 
 // Mark FVG as filled when price overlaps the zone
 f_fill(arr) =>
-    for i = 0 to array.size(arr) - 1
-        f = array.get(arr, i)
-        if not f.is_used and high >= f.bot and low <= f.top
-            f.is_used := true
-            box.set_bgcolor(f.bx,     i_used_col)
-            box.set_border_color(f.bx, i_used_col)
+    n = array.size(arr)
+    if n > 0
+        for i = 0 to n - 1
+            f = array.get(arr, i)
+            if not f.is_used and high >= f.bot and low <= f.top
+                f.is_used := true
+                box.set_bgcolor(f.bx,     i_used_col)
+                box.set_border_color(f.bx, i_used_col)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ① ANCHORED PRICE POSITION — 15min Prev H / L

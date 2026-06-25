@@ -175,18 +175,18 @@ is_str = c5 > o5 and ratio5 >= i_body_th and (h5 - c5) <= body5 * 0.30
 // Strong bear: big body, bear candle, closes near its low
 is_wk  = c5 < o5 and ratio5 >= i_body_th and (c5 - l5) <= body5 * 0.30
 
-sw_col = i_sw ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na
+// S/W background only meaningful when chart TF is below 5min
+sw_col = (i_sw and timeframe.in_seconds() < 300) ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na
 bgcolor(sw_col, title = "Strength / Weakness Background")
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ FAIR VALUE GAPS — 15min
 // ─────────────────────────────────────────────────────────────────────────────
-if i_f15
+// 15min FVGs — only draw when chart TF is strictly below 15min
+if i_f15 and timeframe.in_seconds() < 900
     if timeframe.change("15")
-        // Bullish FVG: C1.low > C3.high
         if l15c1 > h15c3
             f_add(arr15, true,  l15c1, h15c3, 2, "FVG 15m ▲")
-        // Bearish FVG: C1.high < C3.low
         if h15c1 < l15c3
             f_add(arr15, false, l15c3, h15c1, 2, "FVG 15m ▼")
     f_fill(arr15)
@@ -194,7 +194,8 @@ if i_f15
 // ─────────────────────────────────────────────────────────────────────────────
 // ③ FAIR VALUE GAPS — 5min
 // ─────────────────────────────────────────────────────────────────────────────
-if i_f5
+// 5min FVGs — only draw when chart TF is strictly below 5min
+if i_f5 and timeframe.in_seconds() < 300
     if timeframe.change("5")
         if l5c1 > h5c3
             f_add(arr5, true,  l5c1, h5c3, 1, "FVG 5m ▲")
@@ -203,10 +204,9 @@ if i_f5
     f_fill(arr5)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ③ FAIR VALUE GAPS — 1min  (only active when chart timeframe ≤ 1 minute)
+// ③ FAIR VALUE GAPS — 1min  (only active when chart timeframe = 1 minute)
 // ─────────────────────────────────────────────────────────────────────────────
 if i_f1 and timeframe.in_seconds() <= 60 and barstate.isconfirmed
-    // Current bar is C3; bar[1] is C2; bar[2] is C1
     if low > high[2]
         f_add(arr1, true,  low,    high[2], 1, "FVG 1m ▲")
     if high < low[2]

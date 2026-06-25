@@ -98,7 +98,7 @@ if i_sw and timeframe.in_seconds() < 300
     bgcolor(bg_col)
 
 // ─── ③ FVG 15min ──────────────────────────────────────────────────────────────
-if i_f15 and timeframe.in_seconds() < 900 and timeframe.change("15")
+if i_f15 and timeframe.change("15")
     if l15c1 > h15c3
         f_add(a15, true,  l15c1, h15c3, 2)
     if h15c1 < l15c3

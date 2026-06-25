@@ -88,7 +88,7 @@ if i_anc and (timeframe.change("15") or barstate.isfirst)
     lbl := label.new(bar_index, anc_m, bias_str, style=label.style_label_right, color=color.new(i_anc_col,75), textcolor=color.white, size=size.small)
 
 // ─── ② STRENGTH VS WEAKNESS ───────────────────────────────────────────────────
-if i_sw and timeframe.in_seconds() < 300
+if i_sw and timeframe.in_seconds() <= 300
     rng   = h5 - l5
     body  = math.abs(c5 - o5)
     ratio = rng > 0 ? body / rng : 0.0
@@ -106,7 +106,7 @@ if i_f15 and timeframe.change("15")
 f_fill(a15)
 
 // ─── ③ FVG 5min ───────────────────────────────────────────────────────────────
-if i_f5 and timeframe.in_seconds() < 300 and timeframe.change("5")
+if i_f5 and timeframe.in_seconds() <= 300 and timeframe.change("5")
     if l5c1 > h5c3
         f_add(a5, true,  l5c1, h5c3, 1)
     if h5c1 < l5c3

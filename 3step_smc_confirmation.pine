@@ -1,27 +1,27 @@
 //@version=5
-indicator("3-Step SMC — 15min Framework", overlay=true, max_boxes_count=300, max_lines_count=10, max_labels_count=20)
+indicator("3-Step SMC - 15min Framework", overlay=true, max_boxes_count=300, max_lines_count=10, max_labels_count=20)
 
-// ─── INPUTS ───────────────────────────────────────────────────────────────────
-G1 = "① Supply / Demand Zone (15min)"
+// --- INPUTS -------------------------------------------------------------------
+G1 = "1. Supply / Demand Zone (15min)"
 i_show_ob  = input.bool(true,  "Show Supply/Demand Zones",  group=G1)
 i_sup_col  = input.color(color.new(#f44336, 78), "Supply",  group=G1)
 i_dem_col  = input.color(color.new(#26a69a, 78), "Demand",  group=G1)
 i_nob      = input.int(3,   "Max zones to show",            group=G1, minval=1, maxval=10)
 i_ob_ext   = input.int(200, "Zone width (bars)",            group=G1, minval=20, maxval=2000)
 
-G2 = "② Weakness — Wick Rectangle (15min)"
+G2 = "2. Weakness - Wick Rectangle (15min)"
 i_show_wr  = input.bool(true,  "Show Wick Rectangle",       group=G2)
 i_wr_col   = input.color(color.new(color.silver, 55), "Color", group=G2)
 i_wick_th  = input.float(0.45, "Min Wick/Range Ratio",      group=G2, minval=0.1, maxval=0.9, step=0.05)
 
-G3 = "③ Imbalance — FVG (15min)"
+G3 = "3. Imbalance - FVG (15min)"
 i_show_fvg = input.bool(true,  "Show FVG",                  group=G3)
 i_fvg_b    = input.color(color.new(#00bcd4, 82), "Bull FVG",group=G3)
 i_fvg_s    = input.color(color.new(#ef5350, 82), "Bear FVG",group=G3)
 i_fvg_u    = input.color(color.new(color.gray, 92), "Used", group=G3)
 i_nfvg     = input.int(5, "Max FVGs",                       group=G3, minval=1, maxval=20)
 
-GS = "Signal — Entry & Target"
+GS = "Signal - Entry & Target"
 i_show_sig = input.bool(true,  "Show Entry / Target Zones", group=GS)
 i_s_ent    = input.color(color.new(#f44336, 60), "Short Entry",  group=GS)
 i_l_ent    = input.color(color.new(#26a69a, 60), "Long Entry",   group=GS)
@@ -29,7 +29,7 @@ i_s_tgt    = input.color(color.new(#26a69a, 70), "Short Target", group=GS)
 i_l_tgt    = input.color(color.new(#f44336, 70), "Long Target",  group=GS)
 i_rr       = input.float(2.0, "R:R Ratio", group=GS, minval=0.5, maxval=5.0, step=0.5)
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
+// --- TYPES --------------------------------------------------------------------
 type Zone
     box   bx
     float top
@@ -44,7 +44,7 @@ type FVG
     bool  is_bull
     bool  done
 
-// ─── STATE ────────────────────────────────────────────────────────────────────
+// --- STATE --------------------------------------------------------------------
 var Zone[] zones   = array.new<Zone>()
 var FVG[]  fvgs    = array.new<FVG>()
 var box    wr_bx   = na
@@ -55,14 +55,14 @@ var float  wr_bot  = na
 var bool   wr_bear = na
 var table  panel   = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black,65), border_color=color.new(color.gray,50), border_width=1, frame_width=1, frame_color=color.new(color.gray,50))
 
-// ─── 15MIN DATA ───────────────────────────────────────────────────────────────
+// --- 15MIN DATA ---------------------------------------------------------------
 [o1, h1, l1, c1] = request.security(syminfo.tickerid, "15", [open[1], high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
 [o2, h2, l2, c2] = request.security(syminfo.tickerid, "15", [open[2], high[2], low[2], close[2]], lookahead=barmerge.lookahead_on)
 [h3, l3]         = request.security(syminfo.tickerid, "15", [high[3], low[3]], lookahead=barmerge.lookahead_on)
 
 new15 = timeframe.change("15")
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
+// --- HELPERS ------------------------------------------------------------------
 f_add_zone(is_bear, top, bot) =>
     if array.size(zones) >= i_nob
         old = array.shift(zones)
@@ -114,7 +114,7 @@ f_check_fvgs() =>
                 box.set_bgcolor(f.bx, i_fvg_u)
                 box.set_border_color(f.bx, i_fvg_u)
 
-// ─── ① SUPPLY / DEMAND ZONES ──────────────────────────────────────────────────
+// --- 1. SUPPLY / DEMAND ZONES --------------------------------------------------
 if i_show_ob and new15
     rng1  = h1 - l1
     body1 = math.abs(c1 - o1)
@@ -126,7 +126,7 @@ if i_show_ob and new15
 
 f_check_zones()
 
-// ─── ② WEAKNESS — WICK RECTANGLE ─────────────────────────────────────────────
+// --- 2. WEAKNESS - WICK RECTANGLE ---------------------------------------------
 if i_show_wr and new15
     rng1    = h1 - l1
     up_wick = h1 - math.max(o1, c1)
@@ -160,7 +160,7 @@ if i_show_wr and new15
             e_bx := box.new(bar_index - 1, h1, bar_index + i_ob_ext, l1, bgcolor=i_l_ent, border_color=color.new(#26a69a, 20), border_width=2, text="LONG ENTRY", text_color=color.white, text_size=size.small, text_halign=text.align_center, text_valign=text.align_center)
             t_bx := box.new(bar_index - 1, h1, bar_index + i_ob_ext, h1 + risk * i_rr, bgcolor=i_l_tgt, border_color=color.new(#26a69a, 20), border_width=1, text="TARGET  " + tgt_rr, text_color=color.white, text_size=size.small, text_halign=text.align_center, text_valign=text.align_center)
 
-// ─── ③ FVG ────────────────────────────────────────────────────────────────────
+// --- 3. FVG --------------------------------------------------------------------
 if i_show_fvg and new15
     if l1 > h3
         f_add_fvg(true,  l1, h3)
@@ -168,7 +168,7 @@ if i_show_fvg and new15
         f_add_fvg(false, l3, h1)
 f_check_fvgs()
 
-// ─── SIGNAL PANEL ─────────────────────────────────────────────────────────────
+// --- SIGNAL PANEL -------------------------------------------------------------
 has_supply = false
 has_demand = false
 n_z = array.size(zones)
@@ -184,7 +184,7 @@ wr_active  = not na(wr_top)
 bear_setup = wr_active and wr_bear
 bull_setup = wr_active and not wr_bear
 
-sig_txt = bear_setup ? "SHORT  ▼" : bull_setup ? "LONG  ▲" : has_supply ? "Wait — Supply" : has_demand ? "Wait — Demand" : "No Setup"
+sig_txt = bear_setup ? "SHORT  v" : bull_setup ? "LONG  ^" : has_supply ? "Wait - Supply" : has_demand ? "Wait - Demand" : "No Setup"
 sig_col = bear_setup ? color.red : bull_setup ? color.teal : color.gray
 sig_bg  = bear_setup ? color.new(color.red,70) : bull_setup ? color.new(color.teal,70) : color.new(color.gray,80)
 
@@ -201,18 +201,18 @@ if nf > 0
 
 z1v = has_supply ? "Supply" : has_demand ? "Demand" : "None"
 z1c = has_supply ? color.red : has_demand ? color.teal : color.gray
-w1v = wr_active ? (wr_bear ? "Bear Wick ▼" : "Bull Wick ▲") : "None"
+w1v = wr_active ? (wr_bear ? "Bear Wick v" : "Bull Wick ^") : "None"
 w1c = wr_active ? (wr_bear ? color.red : color.teal) : color.gray
-f1v = fvg_bear_ok ? "Bear FVG ▼" : fvg_bull_ok ? "Bull FVG ▲" : "None"
+f1v = fvg_bear_ok ? "Bear FVG v" : fvg_bull_ok ? "Bull FVG ^" : "None"
 f1c = fvg_bear_ok ? color.red : fvg_bull_ok ? color.teal : color.gray
 c_bg = color.new(color.black, 65)
 
 if barstate.islast
-    table.cell(panel, 0, 0, "① Zone",   text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 0, 0, "1. Zone",   text_color=color.white, text_size=size.small, bgcolor=c_bg)
     table.cell(panel, 1, 0, z1v,         text_color=z1c,         text_size=size.small, bgcolor=c_bg)
-    table.cell(panel, 0, 1, "② Wick",   text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 0, 1, "2. Wick",   text_color=color.white, text_size=size.small, bgcolor=c_bg)
     table.cell(panel, 1, 1, w1v,         text_color=w1c,         text_size=size.small, bgcolor=c_bg)
-    table.cell(panel, 0, 2, "③ FVG",    text_color=color.white, text_size=size.small, bgcolor=c_bg)
+    table.cell(panel, 0, 2, "3. FVG",    text_color=color.white, text_size=size.small, bgcolor=c_bg)
     table.cell(panel, 1, 2, f1v,         text_color=f1c,         text_size=size.small, bgcolor=c_bg)
     table.cell(panel, 0, 3, "SIGNAL",   text_color=color.white, text_size=size.normal, bgcolor=sig_bg)
     table.cell(panel, 1, 3, sig_txt,    text_color=sig_col,     text_size=size.normal, bgcolor=sig_bg)

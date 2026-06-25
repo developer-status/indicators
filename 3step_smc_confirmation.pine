@@ -88,14 +88,13 @@ if i_anc and (timeframe.change("15") or barstate.isfirst)
     lbl := label.new(bar_index, anc_m, bias_str, style=label.style_label_right, color=color.new(i_anc_col,75), textcolor=color.white, size=size.small)
 
 // ─── ② STRENGTH VS WEAKNESS ───────────────────────────────────────────────────
-if i_sw and timeframe.in_seconds() <= 300
-    rng   = h5 - l5
-    body  = math.abs(c5 - o5)
-    ratio = rng > 0 ? body / rng : 0.0
-    is_str = c5 > o5 and ratio >= i_body_th and (h5 - c5) <= body * 0.3
-    is_wk  = c5 < o5 and ratio >= i_body_th and (c5 - l5) <= body * 0.3
-    bg_col = is_str ? i_str_col : is_wk ? i_wk_col : na
-    bgcolor(bg_col)
+rng5   = h5 - l5
+body5  = math.abs(c5 - o5)
+ratio5 = rng5 > 0 ? body5 / rng5 : 0.0
+is_str = c5 > o5 and ratio5 >= i_body_th and (h5 - c5) <= body5 * 0.3
+is_wk  = c5 < o5 and ratio5 >= i_body_th and (c5 - l5) <= body5 * 0.3
+sw_on  = i_sw and timeframe.in_seconds() <= 300
+bgcolor(sw_on ? (is_str ? i_str_col : is_wk ? i_wk_col : na) : na, title="S/W Background")
 
 // ─── ③ FVG 15min ──────────────────────────────────────────────────────────────
 if i_f15 and timeframe.change("15")
